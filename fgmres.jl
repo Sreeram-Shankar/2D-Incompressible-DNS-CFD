@@ -1,4 +1,5 @@
 using LinearAlgebra
+using Base.Threads
 import Main.MultigridBackend: apply_pressure_operator
 
 #implements the preconditioned FGMRES solver
@@ -6,13 +7,34 @@ function solve_pressure_fgmres(mg, rhs, mg_params; tol=1e-6, max_iters=100, rest
     finest = mg.levels[1]
     h = finest.h
     bc = finest.bc
+
+    #parallel dot product and norm
+    nt = Threads.nthreads()
+    dotbuf = zeros(Float64, nt)
+    normbuf = zeros(Float64, nt)
+    dot_threaded!(buf, a, b) = begin
+        fill!(buf, 0.0)
+        Threads.@threads for idx in eachindex(a, b)
+            buf[threadid()] += a[idx] * b[idx]
+        end
+        return sum(buf)
+    end
+    norm_threaded!(buf, a) = begin
+        fill!(buf, 0.0)
+        Threads.@threads for idx in eachindex(a)
+            buf[threadid()] += a[idx] * a[idx]
+        end
+        return sqrt(sum(buf))
+    end
+
+    #appplies an initial guess of 0
     x = zeros(size(rhs))
-    rhs_norm = norm(rhs)
+    rhs_norm = norm_threaded!(normbuf, rhs)
     if rhs_norm == 0.0
         return x, [0.0]
     end
 
-    #uses a preconditioner of one w cycle
+    #uses a linear preconditioner of one w cycle
     precond = function(res)
         psol, _ = solve_poisson_mg(mg, res; cycle_type=:w_cycle, smoother=mg_params.smoother, sweeps=mg_params.sweeps, max_cycles=1, ω=mg_params.ω, tolerance=0.0, initial_guess=:zero, initial_state=nothing, verbose=false)
         return psol
@@ -21,11 +43,11 @@ function solve_pressure_fgmres(mg, rhs, mg_params; tol=1e-6, max_iters=100, rest
     reshist = Float64[]
     total_iter = 0
 
-    #performs the GMRES iterations
+    #performs the GMRES iterations with stagnation detection
     stall_window = 3
     for k in 1:max_iters
         r = rhs .- apply_pressure_operator(x, h, bc)
-        beta = norm(r)
+        beta = norm_threaded!(normbuf, r)
         push!(reshist, beta)
         if verbose
             println("FGMRES iter $total_iter: residual = $beta")
@@ -52,10 +74,10 @@ function solve_pressure_fgmres(mg, rhs, mg_params; tol=1e-6, max_iters=100, rest
 
             #performs the Arnoldi iteration
             for i in 1:j
-                H[i, j] = dot(w, V[i])
+                H[i, j] = dot_threaded!(dotbuf, w, V[i])
                 w .-= H[i, j] .* V[i]
             end
-            H[j + 1, j] = norm(w)
+            H[j + 1, j] = norm_threaded!(normbuf, w)
             if H[j + 1, j] != 0.0
                 V[j + 1] = w ./ H[j + 1, j]
             else
@@ -79,6 +101,7 @@ function solve_pressure_fgmres(mg, rhs, mg_params; tol=1e-6, max_iters=100, rest
                 g[j + 1] = -sn[j] * g[j]
                 g[j] = cs[j] * g[j]
             end
+
             resnorm = abs(g[j + 1])
             push!(reshist, resnorm)
             if verbose
@@ -98,6 +121,7 @@ function solve_pressure_fgmres(mg, rhs, mg_params; tol=1e-6, max_iters=100, rest
                     println("FGMRES stagnation detected at iter $total_iter (window Δ = $rng)")
                 end
             end
+
             if converged || stagnating
                 y = H[1:j, 1:j] \ g[1:j]
                 for i in 1:j
