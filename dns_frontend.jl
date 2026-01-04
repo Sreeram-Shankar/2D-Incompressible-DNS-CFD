@@ -594,14 +594,14 @@ function dns_simulation_app()
         "Radau2" => :radau2, "Radau3" => :radau3, "Radau4" => :radau4, "Radau5" => :radau5,
         "Lobatto2" => :lobatto2, "Lobatto3" => :lobatto3, "Lobatto4" => :lobatto4, "Lobatto5" => :lobatto5,
         "SDIRK2" => :sdirk2, "SDIRK3" => :sdirk3, "SDIRK4" => :sdirk4)
-    pressure_options = Dict("Multigrid" => :mg, "PCG" => :pcg, "PFGMRES" => :fgmres)
+    pressure_options = Dict("Multigrid" => :mg, "PCG" => :pcg, "FGMRES" => :fgmres, "BiCGSTAB" => :bicgstab)
     smoother_options = Dict("Weighted Jacobi" => :weighted_jacobi, "RBGS" => :rbgs)
 
     #creates the dropdown menus with labels
     fig[8, 3] = Label(fig, "ODE Solver:", halign = :right, justification = :right)
     ode_menu = Menu(fig[9, 2], options = collect(keys(ode_options)), halign = :left, default = "SSPRK2")
     fig[9, 1] = Label(fig, "Pressure Solver:", halign = :right, justification = :right)
-    pressure_menu = Menu(fig[9, 4], options = collect(keys(pressure_options)), halign = :left, default = "PFGMRES")
+    pressure_menu = Menu(fig[9, 4], options = collect(keys(pressure_options)), halign = :left, default = "PCG")
     fig[9, 3] = Label(fig, "Smoother:", halign = :right, justification = :right)
     smoother_menu = Menu(fig[8, 4], options = collect(keys(smoother_options)), halign = :left, default = "Weighted Jacobi")
 

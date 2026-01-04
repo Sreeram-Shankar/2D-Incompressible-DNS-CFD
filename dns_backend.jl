@@ -9,6 +9,7 @@ include("irk.jl")
 include("sdirk.jl")
 include("cg.jl")
 include("fgmres.jl")
+include("bicgstab.jl")
 
 #defines the structure for the grid
 struct GridParams
@@ -284,6 +285,9 @@ function run_dns(grid::GridParams, cylinder::CylinderParams, fluid::FluidParams,
         elseif pressure_solver == :fgmres
             restart = min(30, krylov_max_iters > 0 ? krylov_max_iters : 30)
             p, res = solve_pressure_fgmres(mg, rhs_p, mg_params; tol=krylov_tol, max_iters=krylov_max_iters, restart=restart, verbose=verbose)
+            push!(residual_history, res)
+        elseif pressure_solver == :bicgstab
+            p, res = solve_pressure_bicgstab(mg, rhs_p, mg_params; tol=krylov_tol, max_iters=krylov_max_iters, verbose=verbose)
             push!(residual_history, res)
         else
             error("Unsupported pressure solver: $pressure_solver")
