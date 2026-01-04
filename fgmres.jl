@@ -116,5 +116,3 @@ function solve_pressure_fgmres(mg, rhs, mg_params; tol=1e-6, max_iters=100, rest
     end
     return x, reshist
 end
-
-
