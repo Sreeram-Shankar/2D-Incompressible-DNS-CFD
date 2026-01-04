@@ -138,4 +138,3 @@ function solve_pressure_bicgstab(mg, rhs, mg_params; tol=1e-6, max_iters=100, ve
     end
     return x, reshist
 end
-
