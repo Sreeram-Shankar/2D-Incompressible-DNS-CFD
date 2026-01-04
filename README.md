@@ -35,6 +35,7 @@ The emphasis of the project is **numerical stability, solver correctness, and ar
 - Multigrid as a standalone solver or preconditioner
 - Preconditioned Conjugate Gradient (PCG)
 - Flexible GMRES (FGMRES)
+- Biconjugate Gradient Stabilized (BiCGSTAB)
 - Pressure operator implemented consistently between Krylov and multigrid
 
 ### Time Integration
@@ -60,7 +61,8 @@ The emphasis of the project is **numerical stability, solver correctness, and ar
 ├── dns_backend.jl     # Core DNS solver 
 ├── multigrid.jl       # Multigrid hierarchy and smoothers
 ├── cg.jl              # Preconditioned Conjugate Gradient solver
-├── fgmres.jl          # Flexible GMRES implementation
+├── fgmres.jl          # Flexible GMRES solver
+├── bicgstab.jl          # Biconjugate Gradient Stabilization solver
 ├── rk.jl              # Explicit Runge–Kutta methods
 ├── ssprk.jl           # SSPRK time integrators
 ├── sdirk.jl           # SDIRK fixed point methods 
