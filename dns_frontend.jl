@@ -512,7 +512,7 @@ function dns_simulation_app()
         
         #runs the backend simulation
         try
-            sol = DNSBackend.run_dns(grid, cyl, fluid, time_params, mg_params, ode_params; velocity_bc! = velocity_bc, subtract_mean_rhs=true, pressure_solver=args["pressure_solver"], pcg_tol=args["solver_tol"], pcg_max_iters=args["solver_max_cycles"], verbose=false, save_callback=progress_callback)
+            sol = DNSBackend.run_dns(grid, cyl, fluid, time_params, mg_params, ode_params; velocity_bc! = velocity_bc, subtract_mean_rhs=true, pressure_solver=args["pressure_solver"], krylov_tol=args["solver_tol"], krylov_max_iters=args["solver_max_cycles"], verbose=false, save_callback=progress_callback)
             progress_obs[] = 1.0
             status_label_obs[] = @sprintf("Simulation Complete! Processing results...")
             create_visualization_window(args, u_history, v_history, p_history, sol, grid, cyl, screen, fig)
@@ -594,7 +594,7 @@ function dns_simulation_app()
         "Radau2" => :radau2, "Radau3" => :radau3, "Radau4" => :radau4, "Radau5" => :radau5,
         "Lobatto2" => :lobatto2, "Lobatto3" => :lobatto3, "Lobatto4" => :lobatto4, "Lobatto5" => :lobatto5,
         "SDIRK2" => :sdirk2, "SDIRK3" => :sdirk3, "SDIRK4" => :sdirk4)
-    pressure_options = Dict("Multigrid" => :mg, "PCG" => :pcg)
+    pressure_options = Dict("Multigrid" => :mg, "PCG" => :pcg, "FGMRES" => :fgmres)
     smoother_options = Dict("Weighted Jacobi" => :weighted_jacobi, "RBGS" => :rbgs)
 
     #creates the dropdown menus with labels

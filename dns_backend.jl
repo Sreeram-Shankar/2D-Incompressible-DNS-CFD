@@ -8,6 +8,7 @@ include("ssprk.jl")
 include("irk.jl")
 include("sdirk.jl")
 include("cg.jl")
+include("fgmres.jl")
 
 #defines the structure for the grid
 struct GridParams
@@ -232,7 +233,7 @@ function project_velocity(u_star, v_star, p, dt, rho, dx)
 end
 
 #main solver function for DNS
-function run_dns(grid::GridParams, cylinder::CylinderParams, fluid::FluidParams, time_params::TimeParams, mg_params::MGParams, ode_params::ODEParams; momentum_rhs! = default_momentum_rhs!, velocity_bc! = make_velocity_bc(0.1), subtract_mean_rhs::Bool = true, pressure_solver::Symbol = :mg, pcg_tol::Float64 = 1e-6, pcg_max_iters::Int = 50, verbose::Bool = false, save_callback = nothing)
+function run_dns(grid::GridParams, cylinder::CylinderParams, fluid::FluidParams, time_params::TimeParams, mg_params::MGParams, ode_params::ODEParams; momentum_rhs! = default_momentum_rhs!, velocity_bc! = make_velocity_bc(0.1), subtract_mean_rhs::Bool = true, pressure_solver::Symbol = :mg, krylov_tol::Float64 = 1e-6, krylov_max_iters::Int = 50, verbose::Bool = false, save_callback = nothing)
     n = grid.n
     dt = time_params.dt
     dx = grid.dx
@@ -278,7 +279,11 @@ function run_dns(grid::GridParams, cylinder::CylinderParams, fluid::FluidParams,
             p, res = solve_poisson_mg(mg, rhs_p; cycle_type=mg_params.cycle_type, smoother=mg_params.smoother, sweeps=mg_params.sweeps, max_cycles=mg_params.max_cycles, ω=mg_params.ω, tolerance=mg_params.tolerance, initial_guess=mg_params.initial_guess, initial_state=initial_state, verbose=verbose)
             push!(residual_history, res)
         elseif pressure_solver == :pcg
-            p, res = solve_pressure_pcg(mg, rhs_p, mg_params; tol=pcg_tol, max_iters=pcg_max_iters, verbose=verbose)
+            p, res = solve_pressure_pcg(mg, rhs_p, mg_params; tol=krylov_tol, max_iters=krylov_max_iters, verbose=verbose)
+            push!(residual_history, res)
+        elseif pressure_solver == :fgmres
+            restart = min(30, krylov_max_iters > 0 ? krylov_max_iters : 30)
+            p, res = solve_pressure_fgmres(mg, rhs_p, mg_params; tol=krylov_tol, max_iters=krylov_max_iters, restart=restart, verbose=verbose)
             push!(residual_history, res)
         else
             error("Unsupported pressure solver: $pressure_solver")
