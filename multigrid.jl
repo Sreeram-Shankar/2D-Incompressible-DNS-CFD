@@ -199,12 +199,12 @@ end
 #performs LU decomposition on the coarsest grid for uniform dirichlet bcs or falls back to smoothing
 function coarse_exact_solve!(lev::MGLevel)
     bc = lev.bc
-    #only handle pure Dirichlet exactly; otherwise fall back to smoothing
     if !(bc.left == :dirichlet && bc.right == :dirichlet && bc.top == :dirichlet && bc.bottom == :dirichlet)
         apply_smoother!(lev, :weighted_jacobi, 100, 0.8)
         return
     end
 
+    #defines the parameters for LU
     n = lev.n
     h = lev.h
     u = lev.u
@@ -553,4 +553,5 @@ function solve_poisson_mg(mg::MultigridHierarchy, rhs; cycle_type, smoother, swe
     return copy(finest.u), residual_history
 end
 export solve_poisson_mg, build_hierarchy, PressureBC, default_pressure_bc, apply_pressure_bc!, apply_pressure_operator
+
 end
