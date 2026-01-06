@@ -583,7 +583,7 @@ function dns_simulation_app()
     add_field(6, 1, "Cylinder Center y (m):", 0.5)
     add_field(6, 3, "Multigrid Sweeps:", 7)
     add_field(7, 1, "Solver Tolerance:", 1e-6)
-    add_field(7, 3, "Multigrid ω:", 0.7)
+    add_field(7, 3, "Relaxation ω:", 0.7)
     add_field(8, 1, "Solver Max Cycles:", 100)
 
     #defines the momentum ode and pressure pde solver choices
@@ -594,16 +594,16 @@ function dns_simulation_app()
         "Radau2" => :radau2, "Radau3" => :radau3, "Radau4" => :radau4, "Radau5" => :radau5,
         "Lobatto2" => :lobatto2, "Lobatto3" => :lobatto3, "Lobatto4" => :lobatto4, "Lobatto5" => :lobatto5,
         "SDIRK2" => :sdirk2, "SDIRK3" => :sdirk3, "SDIRK4" => :sdirk4)
-    pressure_options = Dict("Multigrid" => :mg, "PCG" => :pcg, "FGMRES" => :fgmres, "BiCGSTAB" => :bicgstab)
-    smoother_options = Dict("Weighted Jacobi" => :weighted_jacobi, "RBGS" => :rbgs)
+    pressure_options = Dict("Multigrid" => :mg, "PCG" => :pcg, "FGMRES" => :fgmres, "PBiCGSTAB" => :bicgstab, "Chebyshev" => :chebyshev, "Weighted Jacobi" => :weighted_jacobi, "RBGS" => :rbgs)
+    smoother_options = Dict("Weighted Jacobi" => :weighted_jacobi, "RBGS" => :rbgs, "Chebyshev" => :chebyshev)
 
     #creates the dropdown menus with labels
     fig[8, 3] = Label(fig, "ODE Solver:", halign = :right, justification = :right)
-    ode_menu = Menu(fig[9, 2], options = collect(keys(ode_options)), halign = :left, default = "SSPRK2")
+    ode_menu = Menu(fig[8, 4], options = collect(keys(ode_options)), halign = :left, default = "SSPRK2")
     fig[9, 1] = Label(fig, "Pressure Solver:", halign = :right, justification = :right)
-    pressure_menu = Menu(fig[9, 4], options = collect(keys(pressure_options)), halign = :left, default = "PCG")
+    pressure_menu = Menu(fig[9, 2], options = collect(keys(pressure_options)), halign = :left, default = "PCG")
     fig[9, 3] = Label(fig, "Smoother:", halign = :right, justification = :right)
-    smoother_menu = Menu(fig[8, 4], options = collect(keys(smoother_options)), halign = :left, default = "Weighted Jacobi")
+    smoother_menu = Menu(fig[9, 4], options = collect(keys(smoother_options)), halign = :left, default = "Weighted Jacobi")
 
     #defines and creates the buttons for the preset viscosities
     viscosity_presets = Dict("       Water        " => 1e-6, "        Air        " => 1.5e-5, "        Oil        " => 1e-4, "       Honey       " => 1e-2, "      Glycerin      " => 1.2e-3, "       Blood       "  => 3.5e-6, "      Gasoline      " => 5e-7)

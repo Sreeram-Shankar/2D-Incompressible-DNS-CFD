@@ -2,6 +2,7 @@ module DNSBackend
 using LinearAlgebra
 using Statistics
 using Base: @propagate_inbounds
+using Base.Threads
 import Main.MultigridBackend: MultigridHierarchy, solve_poisson_mg, build_hierarchy, PressureBC, default_pressure_bc, apply_pressure_operator, apply_pressure_bc!
 include("rk.jl")
 include("ssprk.jl")
@@ -10,6 +11,245 @@ include("sdirk.jl")
 include("cg.jl")
 include("fgmres.jl")
 include("bicgstab.jl")
+
+#defines the standalone weighted Jacobi pressure solver
+function solve_pressure_weighted_jacobi(mg, rhs, mg_params; tol=1e-6, max_iters=100, verbose::Bool=false)
+    finest = mg.levels[1]
+    h = finest.h
+    bc = finest.bc
+    n = size(rhs, 1) - 2
+    nt = Threads.nthreads()
+    normbuf = zeros(Float64, nt)
+
+    #parallel norm calculation
+    norm_threaded!(buf, a) = begin
+        fill!(buf, 0.0)
+        Threads.@threads for idx in eachindex(a)
+            buf[threadid()] += a[idx] * a[idx]
+        end
+        return sqrt(sum(buf))
+    end
+
+    #initializes the pressure field and applies the boundary conditions
+    p = zeros(size(rhs))
+    apply_pressure_bc!(p, h, bc)
+    rhs_norm = norm_threaded!(normbuf, rhs)
+    if rhs_norm == 0.0
+        return p, [0.0]
+    end
+
+    #performs the weighted Jacobi iterations
+    reshist = Float64[]
+    p_new = similar(p)
+    res = similar(rhs)
+    h2 = h * h
+    stall_window = 3
+    for k in 1:max_iters
+        copy!(p_new, p)
+        Threads.@threads for j in 2:n+1
+            @inbounds for i in 2:n+1
+                gs = 0.25 * (p[i+1, j] + p[i-1, j] + p[i, j+1] + p[i, j-1] + h2 * rhs[i, j])
+                p_new[i, j] = p[i, j] + mg_params.ω * (gs - p[i, j])
+            end
+        end
+        apply_pressure_bc!(p_new, h, bc)
+        p, p_new = p_new, p
+        Ap = apply_pressure_operator(p, h, bc)
+        res .= Ap .- rhs
+        resnorm = norm_threaded!(normbuf, res)
+        push!(reshist, resnorm)
+        if verbose
+            println("Weighted Jacobi iter $k: residual = $resnorm")
+        end
+        stagnating = false
+        if length(reshist) >= stall_window
+            recent = reshist[end-stall_window+1:end]
+            rng = maximum(recent) - minimum(recent)
+            stagnating = rng < 1e-3 * maximum(recent)
+            if stagnating && verbose
+                println("Weighted Jacobi stagnation detected at iter $k (window Δ = $rng)")
+            end
+        end
+        if resnorm < tol || resnorm / rhs_norm < tol
+            return p, reshist
+        end
+        if stagnating
+            return p, reshist
+        end
+    end
+    return p, reshist
+end
+
+#defines the standalone RBGS pressure solver
+function solve_pressure_rbgs(mg, rhs, mg_params; tol=1e-6, max_iters=100, verbose::Bool=false)
+    finest = mg.levels[1]
+    h = finest.h
+    bc = finest.bc
+    n = size(rhs, 1) - 2
+    nt = Threads.nthreads()
+    normbuf = zeros(Float64, nt)
+
+    #parallel norm calculation
+    norm_threaded!(buf, a) = begin
+        fill!(buf, 0.0)
+        Threads.@threads for idx in eachindex(a)
+            buf[threadid()] += a[idx] * a[idx]
+        end
+        return sqrt(sum(buf))
+    end
+
+    #initializes the pressure field and applies the boundary conditions
+    p = zeros(size(rhs))
+    apply_pressure_bc!(p, h, bc)
+    rhs_norm = norm_threaded!(normbuf, rhs)
+    if rhs_norm == 0.0
+        return p, [0.0]
+    end
+
+    #performs the RBGS iterations
+    reshist = Float64[]
+    res = similar(rhs)
+    h2 = h * h
+    stall_window = 3
+    for k in 1:max_iters
+        #performs the red sweep
+        Threads.@threads for j in 2:n+1
+            @inbounds for i in 2:n+1
+                if (i + j) % 2 == 0
+                    p[i, j] = 0.25 * (p[i+1, j] + p[i-1, j] + p[i, j+1] + p[i, j-1] + h2 * rhs[i, j])
+                end
+            end
+        end
+        #performs the black sweep
+        Threads.@threads for j in 2:n+1
+            @inbounds for i in 2:n+1
+                if (i + j) % 2 == 1
+                    p[i, j] = 0.25 * (p[i+1, j] + p[i-1, j] + p[i, j+1] + p[i, j-1] + h2 * rhs[i, j])
+                end
+            end
+        end
+        apply_pressure_bc!(p, h, bc)
+        Ap = apply_pressure_operator(p, h, bc)
+        res .= Ap .- rhs
+        resnorm = norm_threaded!(normbuf, res)
+        push!(reshist, resnorm)
+        if verbose
+            println("RBGS iter $k: residual = $resnorm")
+        end
+        stagnating = false
+        if length(reshist) >= stall_window
+            recent = reshist[end-stall_window+1:end]
+            rng = maximum(recent) - minimum(recent)
+            stagnating = rng < 1e-3 * maximum(recent)
+            if stagnating && verbose
+                println("RBGS stagnation detected at iter $k (window Δ = $rng)")
+            end
+        end
+        if resnorm < tol || resnorm / rhs_norm < tol
+            return p, reshist
+        end
+        if stagnating
+            return p, reshist
+        end
+    end
+    return p, reshist
+end
+
+#defines the standalone Chebyshev pressure solver
+function solve_pressure_chebyshev(mg, rhs, mg_params; tol=1e-6, max_iters=100, verbose::Bool=false)
+    finest = mg.levels[1]
+    h = finest.h
+    bc = finest.bc
+    n = size(rhs, 1) - 2
+    nt = Threads.nthreads()
+    normbuf = zeros(Float64, nt)
+
+    #parallel norm calculation
+    norm_threaded!(buf, a) = begin
+        fill!(buf, 0.0)
+        Threads.@threads for idx in eachindex(a)
+            buf[threadid()] += a[idx] * a[idx]
+        end
+        return sqrt(sum(buf))
+    end
+
+    #initializes the pressure field and applies the boundary conditions
+    p = zeros(size(rhs))
+    apply_pressure_bc!(p, h, bc)
+    rhs_norm = norm_threaded!(normbuf, rhs)
+    if rhs_norm == 0.0
+        return p, [0.0]
+    end
+
+    #defines the Chebyshev parameters
+    order = 4
+    h2 = h * h
+    s = sin(pi / (2*(n+1)))^2
+    λ_min = 0.9 * (8.0 / h2) * s          
+    λ_max = 1.1 * (8.0 / h2)              
+    d = 0.5 * (λ_max + λ_min)
+    c = 0.5 * (λ_max - λ_min)
+    inv_diag = h2 / 4.0
+    reshist = Float64[]
+    p_old = copy(p)
+    alpha_prev = 0.0
+    res = similar(rhs)
+    z = similar(rhs)
+
+    #performs the Chebyshev iterations
+    stall_window = 3
+    for k in 1:max_iters
+        for m in 1:order
+            Ap = apply_pressure_operator(p, h, bc)
+            @inbounds @threads for j in 2:n+1
+                for i in 2:n+1
+                    res[i,j] = rhs[i,j] - Ap[i,j]
+                    z[i,j] = inv_diag * res[i,j]
+                end
+            end
+            apply_pressure_bc!(res, h, bc)
+            apply_pressure_bc!(z, h, bc)
+
+            if m == 1
+                alpha = 1 / d
+                beta = 0.0
+            else
+                beta = (c / (2d))^2
+                alpha = 1 / (d - beta / alpha_prev)
+            end
+
+            p_new = @views p .+ alpha .* z .+ beta .* (p .- p_old)
+            p_old .= p
+            p .= p_new
+            apply_pressure_bc!(p, h, bc)
+            alpha_prev = alpha
+        end
+
+        Ap = apply_pressure_operator(p, h, bc)
+        res .= Ap .- rhs
+        resnorm = norm_threaded!(normbuf, res)
+        push!(reshist, resnorm)
+        if verbose
+            println("Chebyshev iter $k: residual = $resnorm")
+        end
+        stagnating = false
+        if length(reshist) >= stall_window
+            recent = reshist[end-stall_window+1:end]
+            rng = maximum(recent) - minimum(recent)
+            stagnating = rng < 1e-3 * maximum(recent)
+            if stagnating && verbose
+                println("Chebyshev stagnation detected at iter $k (window Δ = $rng)")
+            end
+        end
+        if resnorm < tol || resnorm / rhs_norm < tol
+            return p, reshist
+        end
+        if stagnating
+            return p, reshist
+        end
+    end
+    return p, reshist
+end
 
 #defines the structure for the grid
 struct GridParams
@@ -247,7 +487,7 @@ function run_dns(grid::GridParams, cylinder::CylinderParams, fluid::FluidParams,
     velocity_bc!(u, v, mask)
 
     #builds the multigrid hierarchy for pressure with chosen BCs
-    mg = build_hierarchy(n; bc=mg_params.bc)
+    mg = build_hierarchy(n; bc=mg_params.bc, L=grid.L)
 
     #selects the RK method
     rk_step = select_stepper(ode_params.method)
@@ -288,6 +528,15 @@ function run_dns(grid::GridParams, cylinder::CylinderParams, fluid::FluidParams,
             push!(residual_history, res)
         elseif pressure_solver == :bicgstab
             p, res = solve_pressure_bicgstab(mg, rhs_p, mg_params; tol=krylov_tol, max_iters=krylov_max_iters, verbose=verbose)
+            push!(residual_history, res)
+        elseif pressure_solver == :chebyshev
+            p, res = solve_pressure_chebyshev(mg, rhs_p, mg_params; tol=krylov_tol, max_iters=krylov_max_iters, verbose=verbose)
+            push!(residual_history, res)
+        elseif pressure_solver == :weighted_jacobi
+            p, res = solve_pressure_weighted_jacobi(mg, rhs_p, mg_params; tol=krylov_tol, max_iters=krylov_max_iters, verbose=verbose)
+            push!(residual_history, res)
+        elseif pressure_solver == :rbgs
+            p, res = solve_pressure_rbgs(mg, rhs_p, mg_params; tol=krylov_tol, max_iters=krylov_max_iters, verbose=verbose)
             push!(residual_history, res)
         else
             error("Unsupported pressure solver: $pressure_solver")

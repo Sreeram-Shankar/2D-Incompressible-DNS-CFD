@@ -3,6 +3,7 @@ module MultigridBackend
 using LinearAlgebra
 using Random
 using Base.Threads
+using SparseArrays
 
 #pressure boundary condition container
 struct PressureBC
@@ -164,12 +165,11 @@ function set_rhs!(finest::MGLevel, rhs)
 end
 
 #builds the hierarchy from finest to coarsest
-function build_hierarchy(N::Int; bc::PressureBC = default_pressure_bc())
+function build_hierarchy(N::Int; bc::PressureBC = default_pressure_bc(), L::Float64 = 1.0)
     levels = MGLevel[]
     n = N
     while n ≥ 4
-        h = 1.0/(n + 1)
-        #creates the variables for the current level
+        h = L / (n - 1)
         push!(levels, MGLevel(n, h, zeros(n+2, n+2), zeros(n+2, n+2), zeros(n+2, n+2), bc))
         n ÷= 2
     end
@@ -196,9 +196,59 @@ function compute_residual!(lev::MGLevel)
     end
 end
 
-#performs extra smoothing on the coarsest grid
+#performs LU decomposition on the coarsest grid for uniform dirichlet bcs or falls back to smoothing
 function coarse_exact_solve!(lev::MGLevel)
-    apply_smoother!(lev, :weighted_jacobi, 20, 0.8)
+    bc = lev.bc
+    #only handle pure Dirichlet exactly; otherwise fall back to smoothing
+    if !(bc.left == :dirichlet && bc.right == :dirichlet && bc.top == :dirichlet && bc.bottom == :dirichlet)
+        apply_smoother!(lev, :weighted_jacobi, 100, 0.8)
+        return
+    end
+
+    n = lev.n
+    h = lev.h
+    u = lev.u
+    f = lev.f
+    apply_pressure_bc!(lev) 
+    m = n * n
+    A = spzeros(m, m)
+    rhs = zeros(m)
+    idx(i, j) = (j - 1) * n + i
+    @inbounds for j in 1:n
+        for i in 1:n
+            k = idx(i, j)
+            A[k, k] = 4.0
+            rhs[k] = (h^2) * f[i+1, j+1]
+            if i > 1
+                A[k, idx(i-1, j)] = -1.0
+            else
+                rhs[k] += u[1, j+1]
+            end
+            if i < n
+                A[k, idx(i+1, j)] = -1.0
+            else
+                rhs[k] += u[n+2, j+1]
+            end
+            if j > 1
+                A[k, idx(i, j-1)] = -1.0
+            else
+                rhs[k] += u[i+1, 1]
+            end
+            if j < n
+                A[k, idx(i, j+1)] = -1.0
+            else
+                rhs[k] += u[i+1, n+2]
+            end
+        end
+    end
+    luA = lu(A)
+    sol = luA \ rhs
+    @inbounds for j in 1:n
+        for i in 1:n
+            u[i+1, j+1] = sol[idx(i, j)]
+        end
+    end
+    apply_pressure_bc!(lev)
 end
 
 #performs the weighting restriction
@@ -292,12 +342,62 @@ function smooth_rbgs!(lev::MGLevel, sweeps::Int)
     end
 end
 
+#defines the Chebyshev smoother
+function smooth_chebyshev!(lev::MGLevel, sweeps::Int; order::Int=4)
+    n = lev.n
+    u = lev.u; f = lev.f
+    h = lev.h
+    h2 = h^2
+
+    #defines the Chebyshev parameters
+    s = sin(pi / (2*(n+1)))^2
+    λ_min = 0.9 * (8.0 / h2) * s
+    λ_max = 1.1 * (8.0 / h2)
+    d = 0.5 * (λ_max + λ_min)
+    c = 0.5 * (λ_max - λ_min)
+    inv_diag = h2 / 4.0
+    u_old = copy(u)
+    alpha_prev = 0.0
+    beta = 0.0
+    r = similar(u)
+    z = similar(u)
+
+    #performs the Chebyshev iterations
+    for _ in 1:sweeps
+        for k in 1:order
+            Au = apply_pressure_operator(u, h, lev.bc)
+            @inbounds @threads for j in 2:n+1
+                for i in 2:n+1
+                    r[i,j] = f[i,j] - Au[i,j]
+                    z[i,j] = inv_diag * r[i,j]
+                end
+            end
+            apply_pressure_bc!(r, h, lev.bc)
+            apply_pressure_bc!(z, h, lev.bc)
+            if k == 1
+                alpha = 1 / d
+                beta = 0.0
+            else
+                beta = (c / (2d))^2
+                alpha = 1 / (d - beta / alpha_prev)
+            end
+            u_new = @views u .+ alpha .* z .+ beta .* (u .- u_old)
+            u_old .= u
+            u .= u_new
+            apply_pressure_bc!(u, h, lev.bc)
+            alpha_prev = alpha
+        end
+    end
+end
+
 #applies the smoother based on selection
 function apply_smoother!(lev::MGLevel, smoother, sweeps, ω)
     if smoother == :weighted_jacobi
         smooth_weighted_jacobi!(lev, sweeps, ω)
     elseif smoother == :rbgs
         smooth_rbgs!(lev, sweeps)
+    elseif smoother == :chebyshev
+        smooth_chebyshev!(lev, sweeps)
     else
         error("Unsupported smoother: $smoother")
     end
