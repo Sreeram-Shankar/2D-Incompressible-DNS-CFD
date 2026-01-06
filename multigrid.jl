@@ -204,7 +204,7 @@ function coarse_exact_solve!(lev::MGLevel)
         return
     end
 
-    #defines the parameters for LU
+    #defines the parameters for the LU decomposition
     n = lev.n
     h = lev.h
     u = lev.u
@@ -214,6 +214,8 @@ function coarse_exact_solve!(lev::MGLevel)
     A = spzeros(m, m)
     rhs = zeros(m)
     idx(i, j) = (j - 1) * n + i
+
+    #builds the matrix and right hand side
     @inbounds for j in 1:n
         for i in 1:n
             k = idx(i, j)
@@ -241,6 +243,8 @@ function coarse_exact_solve!(lev::MGLevel)
             end
         end
     end
+
+    #performs Lu and solves for the solution
     luA = lu(A)
     sol = luA \ rhs
     @inbounds for j in 1:n
@@ -553,5 +557,4 @@ function solve_poisson_mg(mg::MultigridHierarchy, rhs; cycle_type, smoother, swe
     return copy(finest.u), residual_history
 end
 export solve_poisson_mg, build_hierarchy, PressureBC, default_pressure_bc, apply_pressure_bc!, apply_pressure_operator
-
 end
