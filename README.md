@@ -31,12 +31,15 @@ The emphasis of the project is **numerical stability, solver correctness, and ar
 - Stable for moderate Reynolds numbers (e.g. Re ≲ O(10³) on coarse grids)
 
 ### Pressure Solvers
-- Multigrid solver (V / W / F cycles)
-- Multigrid as a standalone solver or preconditioner
+- Standalone Weighted Jacobi
+- Standalone Red Black Gauss-Seidel
+- Standalone Chebyshev
+- Standalone Multigrid (W-cycle using smoother choice)
 - Preconditioned Conjugate Gradient (PCG)
 - Flexible GMRES (FGMRES)
-- Biconjugate Gradient Stabilized (BiCGSTAB)
-- Pressure operator implemented consistently between Krylov and multigrid
+- Preconditioned Biconjugate Gradient Stabilized (PBiCGSTAB)
+- Presents options between raw relaxation, raw multigrid, and multigrid-preconditioned krylov
+- Pressure operator implemented consistently between all solvers
 
 ### Time Integration
 - Explicit Runge–Kutta methods
@@ -55,14 +58,13 @@ The emphasis of the project is **numerical stability, solver correctness, and ar
 ## Repository Structure
 
 ```
-
 .
 ├── project.toml       # Project Packages
 ├── dns_backend.jl     # Core DNS solver 
 ├── multigrid.jl       # Multigrid hierarchy and smoothers
 ├── cg.jl              # Preconditioned Conjugate Gradient solver
 ├── fgmres.jl          # Flexible GMRES solver
-├── bicgstab.jl          # Biconjugate Gradient Stabilization solver
+├── bicgstab.jl        # Preconditioned Biconjugate Gradient Stabilized solver
 ├── rk.jl              # Explicit Runge–Kutta methods
 ├── ssprk.jl           # SSPRK time integrators
 ├── sdirk.jl           # SDIRK fixed point methods 
