@@ -31,9 +31,9 @@ The emphasis of the project is **numerical stability, solver correctness, and ar
 - Stable for moderate Reynolds numbers (e.g. Re ≲ O(10³) on coarse grids)
 
 ### Pressure Solvers
-- Standalone Weighted Jacobi (fully parralel)
-- Standalone Red Black Gauss-Seidel (semi-parralel)
-- Standalone Chebyshev (fully parralel)
+- Standalone Weighted Jacobi (fully parallel)
+- Standalone Red Black Gauss-Seidel (semi-parallel)
+- Standalone Chebyshev (fully parallel)
 - Standalone Multigrid (W-cycle using smoother choice)
 - Preconditioned Conjugate Gradient (PCG)
 - Flexible Generalized Minimal Residual (FGMRES)
