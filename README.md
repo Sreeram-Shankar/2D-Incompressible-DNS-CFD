@@ -67,7 +67,7 @@ The emphasis of the project is **numerical stability, solver correctness, and ar
 ├── cg.jl              # Preconditioned CG solver
 ├── fgmres.jl          # Flexible GMRES solver
 ├── bicgstab.jl        # Preconditioned BiCGSTAB solver
-├── rk.jl              # Explicit Runge–Kutta methods
+├── rk.jl              # RK methods
 ├── ssprk.jl           # SSPRK methods
 ├── sdirk.jl           # SDIRK methods
 ├── irk.jl             # FIRK methods
