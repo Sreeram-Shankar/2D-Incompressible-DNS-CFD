@@ -42,15 +42,17 @@ The emphasis of the project is **numerical stability, solver correctness, and ar
 - Pressure operator implemented consistently between all solvers
 
 ### Time Integration
-- Explicit Runge–Kutta methods
-- SSPRK schemes
-- SDIRK and IRK methods (fixed-point iteration, no LU factorization)
+- Standard Explicit Runge–Kutta (RK)
+- Strong Stability Preserving Explicit Runge-Kutta (SSPRK)
+- Fully Implicit Runge-Kutta (GL, Lobatto, Radau)
+- Singly Diagonally Implicit Runge-Kutta (SDIRK)
+- Implicit schemes use fixed-point iteration approximation instead of Newton
 - Fixed time step (no adaptive stepping yet)
 
 ### Frontend & Visualization
 - Native **Julia / GLMakie** frontend
-- Interactive parameter selection
-- Real-time visualization of velocity and derived fields
+- Live progress tracking of simulation
+- Visualization of velocity, derived fields, and scalar quantaties over time
 - ParaView-compatible output for offline visualization
 
 ---
@@ -98,7 +100,7 @@ Results are intended to be **qualitatively correct**, not quantitatively validat
 
 This project makes several **intentional simplifications**:
 
-- Pressure is currently imposed with **Dirichlet boundary conditions everywhere**  
+- Pressure is currently imposed with **pressure Dirichlet boundary conditions everywhere**  
   - This improves numerical stability and solver robustness
   - It slightly constrains pressure recovery near boundaries
 - The immersed boundary treatment is simple masking (no forcing or interpolation)
