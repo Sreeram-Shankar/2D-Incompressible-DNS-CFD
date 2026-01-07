@@ -64,13 +64,13 @@ The emphasis of the project is **numerical stability, solver correctness, and ar
 ├── project.toml       # Project Packages
 ├── dns_backend.jl     # Core DNS solver 
 ├── multigrid.jl       # Multigrid hierarchy and smoothers
-├── cg.jl              # Preconditioned Conjugate Gradient solver
+├── cg.jl              # Preconditioned CG solver
 ├── fgmres.jl          # Flexible GMRES solver
 ├── bicgstab.jl        # Preconditioned BiCGSTAB solver
 ├── rk.jl              # Explicit Runge–Kutta methods
-├── ssprk.jl           # SSPRK time integrators
-├── sdirk.jl           # SDIRK fixed point methods 
-├── irk.jl             # Implicit Runge–Kutta fixed point methods
+├── ssprk.jl           # SSPRK methods
+├── sdirk.jl           # SDIRK methods
+├── irk.jl             # FIRK methods
 └── dns_frontend.jl    # GLMakie-based frontend
 
 ```
